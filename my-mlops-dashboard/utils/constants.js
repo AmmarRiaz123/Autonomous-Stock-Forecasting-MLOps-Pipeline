@@ -14,7 +14,7 @@ export const STATUS_ICONS = {
 
 export const EXCHANGES = ['NYSE', 'NASDAQ', 'LSE', 'TSE', 'HKEX'];
 
-export const RETRAIN_FREQUENCIES = ['Daily', 'Weekly', 'Bi-Weekly', 'Monthly', 'Custom'];
+export const RETRAIN_FREQUENCIES = ['Daily', 'Weekly', 'Bi-Weekly', 'Monthly'];
 
 export const AVAILABLE_MODELS = [
   'LSTM',

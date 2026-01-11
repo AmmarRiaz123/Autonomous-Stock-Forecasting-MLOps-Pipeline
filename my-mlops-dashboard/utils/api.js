@@ -59,19 +59,72 @@ export const getMonitoringStatus = async () => {
   return handleResponse(response);
 };
 
-export const updateSettings = async (data) => {
+export async function getSettings() {
+  console.log('📡 API Call: GET /api/settings');
+  console.log('   URL:', `${API_BASE_URL}/api/settings`);
+  
+  const response = await fetch(`${API_BASE_URL}/api/settings`);
+  
+  if (!response.ok) {
+    console.error('❌ Failed to fetch settings, status:', response.status);
+    throw new Error('Failed to fetch settings');
+  }
+  
+  const data = await response.json();
+  console.log('📥 Raw settings from backend:', JSON.stringify(data, null, 2));
+  
+  // Validate the data structure
+  if (!data || typeof data !== 'object') {
+    console.error('❌ Invalid settings data structure:', data);
+    throw new Error('Invalid settings data');
+  }
+  
+  // Backend returns snake_case, normalize it
+  const normalized = {
+    retrain_frequency: data.retrain_frequency || 'Weekly',
+    drift_threshold: typeof data.drift_threshold === 'number' ? data.drift_threshold : 0.2,
+    enable_auto_deploy: data.enable_auto_deploy ?? true,
+    slack_webhook_url: data.slack_webhook_url || '',
+    candidate_models: Array.isArray(data.candidate_models) ? data.candidate_models : [],
+    exchanges_enabled: Array.isArray(data.exchanges_enabled) ? data.exchanges_enabled : [],
+  };
+  
+  console.log('📦 Normalized settings:', JSON.stringify(normalized, null, 2));
+  console.log('   ✓ candidate_models:', normalized.candidate_models);
+  console.log('   ✓ exchanges_enabled:', normalized.exchanges_enabled);
+  
+  return normalized;
+}
+
+export async function updateSettings(settings) {
+  console.log('📡 API Call: PUT /api/settings');
+  console.log('📤 Sending settings:', settings);
+  
   const response = await fetch(`${API_BASE_URL}/api/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    body: JSON.stringify(settings),
   });
-  return handleResponse(response);
-};
-
-export const getSettings = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/settings`);
-  return handleResponse(response);
-};
+  
+  if (!response.ok) {
+    const error = await response.json();
+    console.error('❌ Failed to update settings:', error);
+    throw new Error(error.detail || 'Failed to update settings');
+  }
+  
+  const data = await response.json();
+  console.log('📥 Backend response after save:', data);
+  
+  // Return normalized settings
+  return {
+    retrain_frequency: data.retrain_frequency || 'Weekly',
+    drift_threshold: data.drift_threshold || 0.2,
+    enable_auto_deploy: data.enable_auto_deploy ?? true,
+    slack_webhook_url: data.slack_webhook_url || '',
+    candidate_models: Array.isArray(data.candidate_models) ? data.candidate_models : [],
+    exchanges_enabled: Array.isArray(data.exchanges_enabled) ? data.exchanges_enabled : [],
+  };
+}
 
 export const retryPipeline = async (ticker) => {
   const response = await fetch(`${API_BASE_URL}/api/pipeline/${ticker}/retry`, {

@@ -1,4 +1,3 @@
-
 # Autonomous Stock Forecasting & MLOps Pipeline
 
 ## Overview
@@ -101,6 +100,26 @@ uvicorn app.main:app --reload
 ```
 
 5. Navigate to the Hugging Face Space for live forecasts.
+
+---
+
+## Notebooks (Automation-friendly)
+
+These notebooks are ticker-agnostic and take `TICKER` from an environment variable:
+
+- `notebooks/01_EDA_Preprocessing.ipynb`
+  - Writes: `data/raw/{TICKER}.csv`, `data/processed/{TICKER}.csv`, `data/logs/{TICKER}_eda.json`
+- `notebooks/02_Model_Experiments.ipynb`
+  - Reads: `data/processed/{TICKER}.csv`
+  - Writes: `data/logs/{TICKER}_experiments.json`, `models/latest/{TICKER}/model.pkl`, `models/latest/{TICKER}/metadata.json`
+  - Archives old: `models/archived/{TICKER}/{timestamp}/`
+
+Example (PowerShell):
+```powershell
+$env:TICKER="AAPL"
+jupyter nbconvert --to notebook --execute notebooks/01_EDA_Preprocessing.ipynb --output notebooks/01_EDA_Preprocessing.executed.ipynb
+jupyter nbconvert --to notebook --execute notebooks/02_Model_Experiments.ipynb --output notebooks/02_Model_Experiments.executed.ipynb
+```
 
 ---
 
