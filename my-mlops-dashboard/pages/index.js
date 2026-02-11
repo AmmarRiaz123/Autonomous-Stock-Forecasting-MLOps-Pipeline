@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import TickerCard from '../components/TickerCard';
 import AddTickerModal from '../components/AddTickerModal';
-import { getTickers, addTicker } from '../utils/api';
+import { getTickers, addTicker, getPipelineStatus } from '../utils/api';
 
 export default function Home() {
   const [tickers, setTickers] = useState([]);
@@ -9,10 +9,39 @@ export default function Home() {
   const [modalOpen, setModalOpen] = useState(false);
   const [filter, setFilter] = useState({ status: 'all', model: 'all' });
   const [notification, setNotification] = useState(null);
+  const [pipeline, setPipeline] = useState(null); // { ticker, status, stage, progress, message, error }
 
   useEffect(() => {
     loadTickers();
   }, []);
+
+  useEffect(() => {
+    if (!pipeline?.ticker) return;
+
+    let alive = true;
+    const ticker = pipeline.ticker;
+
+    const tick = async () => {
+      try {
+        const s = await getPipelineStatus(ticker);
+        if (!alive) return;
+        setPipeline((p) => ({ ...(p || {}), ...s }));
+        if (s.status === 'success' || s.status === 'error') {
+          await loadTickers();
+        }
+      } catch {
+        // ignore transient polling errors
+      }
+    };
+
+    const id = setInterval(tick, 1500);
+    tick();
+
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [pipeline?.ticker]);
 
   const loadTickers = async () => {
     try {
@@ -27,9 +56,10 @@ export default function Home() {
 
   const handleAddTicker = async (data) => {
     try {
-      await addTicker(data);
-      showNotification('Ticker added successfully! Training in progress...', 'success');
-      loadTickers();
+      const t = (data?.ticker || data?.symbol || '').toString().trim().toUpperCase();
+      await addTicker({ ...data, ticker: t });
+      showNotification('Ticker added. Pipeline started...', 'success');
+      setPipeline({ ticker: t, status: 'running', stage: 'queued', progress: 0, message: 'Queued' });
     } catch (error) {
       throw error;
     }
@@ -117,6 +147,56 @@ export default function Home() {
           {notification.message}
         </div>
       )}
+
+      {pipeline?.status === 'running' && (
+        <div style={styles.overlay}>
+          <div style={styles.overlayCard}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>
+              Running pipeline for {pipeline.ticker}
+            </div>
+            <div style={{ marginBottom: 8, color: '#6b7280' }}>
+              {pipeline.stage}: {pipeline.message}
+            </div>
+            <div style={styles.progressBar}>
+              <div
+                style={{
+                  ...styles.progressFill,
+                  width: `${Math.min(100, Math.max(0, pipeline.progress || 0))}%`,
+                }}
+              />
+            </div>
+            <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
+              {Math.round(pipeline.progress || 0)}%
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pipeline?.status === 'error' && (
+        <div className="notification notification-error">
+          Pipeline failed for {pipeline.ticker}: {pipeline.error || 'Unknown error'}
+          <button
+            className="btn btn-secondary"
+            style={{ marginLeft: 12 }}
+            onClick={() => setPipeline(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {pipeline?.status === 'success' && (
+        <div className="notification notification-success">
+          Pipeline completed for {pipeline.ticker}
+          <button
+            className="btn btn-secondary"
+            style={{ marginLeft: 12 }}
+            onClick={() => setPipeline(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -131,5 +211,32 @@ const styles = {
     textAlign: 'center',
     padding: '3rem',
     color: '#6b7280',
+  },
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.35)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+  },
+  overlayCard: {
+    width: 420,
+    background: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+  },
+  progressBar: {
+    height: 10,
+    background: '#e5e7eb',
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    background: '#3b82f6',
+    transition: 'width 200ms linear',
   },
 };

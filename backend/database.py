@@ -3,8 +3,11 @@ from typing import List, Optional
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 import random
+from pathlib import Path
+import json
 
 from models import Ticker, Model, ForecastPoint, Log, Settings as SettingsModel
+from models import PipelineRun  # NEW
 
 async def init_db(session: AsyncSession):
     """Initialize database with sample data"""
@@ -311,3 +314,72 @@ async def update_settings(session: AsyncSession, new_settings: dict) -> Settings
     print(f"   → exchanges_enabled: {settings.exchanges_enabled}")
     
     return settings
+
+async def create_pipeline_run(session: AsyncSession, ticker: str) -> PipelineRun:
+    run = PipelineRun(ticker=ticker, status="running", stage="queued", progress=0.0, message="Queued")
+    session.add(run)
+    await session.commit()
+    await session.refresh(run)
+    return run
+
+async def get_latest_pipeline_run(session: AsyncSession, ticker: str) -> Optional[PipelineRun]:
+    result = await session.execute(
+        select(PipelineRun).where(PipelineRun.ticker == ticker).order_by(PipelineRun.id.desc()).limit(1)
+    )
+    return result.scalar_one_or_none()
+
+async def update_pipeline_run(
+    session: AsyncSession,
+    run_id: int,
+    *,
+    status: Optional[str] = None,
+    stage: Optional[str] = None,
+    progress: Optional[float] = None,
+    message: Optional[str] = None,
+    error: Optional[str] = None,
+) -> Optional[PipelineRun]:
+    result = await session.execute(select(PipelineRun).where(PipelineRun.id == run_id))
+    run = result.scalar_one_or_none()
+    if not run:
+        return None
+
+    if status is not None:
+        run.status = status
+    if stage is not None:
+        run.stage = stage
+    if progress is not None:
+        run.progress = float(progress)
+    if message is not None:
+        run.message = message
+    if error is not None:
+        run.error = error
+
+    run.updated_at = datetime.utcnow()
+    await session.commit()
+    await session.refresh(run)
+    return run
+
+async def finalize_ticker_from_metadata(session: AsyncSession, ticker: str) -> None:
+    """
+    Best-effort: reads models/latest/{TICKER}/metadata.json and updates ticker fields.
+    """
+    repo_root = Path(__file__).resolve().parents[1]
+    meta_path = repo_root / "models" / "latest" / ticker / "metadata.json"
+    model_type = None
+    trained_at = None
+
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        model_type = meta.get("model_type")
+        trained_at = meta.get("trained_at_utc")
+
+    t = await get_ticker(session, ticker)
+    if not t:
+        return
+
+    if model_type:
+        t.current_model = model_type
+    t.last_trained_at = datetime.utcnow()
+    t.status = "healthy"
+    t.updated_at = datetime.utcnow()
+    await session.commit()

@@ -132,3 +132,8 @@ export const retryPipeline = async (ticker) => {
   });
   return handleResponse(response);
 };
+
+export const getPipelineStatus = async (ticker) => {
+  const response = await fetch(`${API_BASE_URL}/api/pipeline/${encodeURIComponent(ticker)}/status`);
+  return handleResponse(response);
+};

@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from pydantic import AliasChoices, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -14,8 +15,12 @@ class TickerBase(BaseModel):
     name: str = Field(..., description="Company name")
     exchange: str = Field(..., description="Stock exchange")
 
-class TickerCreate(TickerBase):
-    pass
+class TickerCreate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    ticker: str = Field(validation_alias=AliasChoices("ticker", "symbol"))
+    exchange: str
+    name: Optional[str] = None
 
 class TickerResponse(TickerBase):
     status: str

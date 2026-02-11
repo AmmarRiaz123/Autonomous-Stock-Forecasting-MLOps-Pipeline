@@ -44,6 +44,17 @@ GRANT ALL PRIVILEGES ON DATABASE mlops_stock_db TO mlops_user;
 DATABASE_URL=postgresql+asyncpg://mlops_user:your_password@localhost:5432/mlops_stock_db
 ```
 
+### Database URL (important)
+
+This backend uses **SQLAlchemy async**, so `DATABASE_URL` must use an async driver:
+
+```bash
+DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST:PORT/DBNAME
+```
+
+If you use `postgresql://...`, SQLAlchemy may try to load `psycopg2` and you will get:
+`InvalidRequestError: ... requires an async driver ... psycopg2 is not async`.
+
 ### Installation
 
 1. Navigate to backend directory:
@@ -93,5 +104,15 @@ The API will be available at:
 - Interactive docs: http://localhost:8000/docs
 - Alternative docs: http://localhost:8000/redoc
 
+> Note: Auto-running `notebooks/01_EDA_Preprocessing.ipynb` and `notebooks/02_Model_Experiments.ipynb` from the backend
+> requires the notebook execution dependencies (`nbformat`, `nbclient`, `ipykernel`). They are included in `requirements.txt`.
+
 ## Project Structure
+
+## API Notes (Ticker Create)
+
+`POST /api/tickers` accepts either:
+- `{ "ticker": "AAPL", "exchange": "NASDAQ", "name": "Apple Inc." }`
+or
+- `{ "symbol": "AAPL", "exchange": "NASDAQ" }`  (name optional; defaults to ticker)
 

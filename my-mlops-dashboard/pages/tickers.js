@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { getTickers } from '../utils/api';
 import AddTickerModal from '../components/AddTickerModal';
 import { addTicker } from '../utils/api';
+import { getPipelineStatus } from '../utils/api'; // NEW
 
 export default function Tickers() {
   const router = useRouter();
@@ -10,10 +11,39 @@ export default function Tickers() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [pipeline, setPipeline] = useState(null);
 
   useEffect(() => {
     loadTickers();
   }, []);
+
+  useEffect(() => {
+    if (!pipeline?.ticker) return;
+
+    let alive = true;
+    const ticker = pipeline.ticker;
+
+    const tick = async () => {
+      try {
+        const s = await getPipelineStatus(ticker);
+        if (!alive) return;
+        setPipeline((p) => ({ ...(p || {}), ...s }));
+        if (s.status === 'success' || s.status === 'error') {
+          await loadTickers();
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    const id = setInterval(tick, 1500);
+    tick();
+
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [pipeline?.ticker]);
 
   const loadTickers = async () => {
     try {
@@ -28,8 +58,10 @@ export default function Tickers() {
 
   const handleAddTicker = async (data) => {
     try {
-      await addTicker(data);
-      showNotification('Ticker added successfully!', 'success');
+      const t = (data?.ticker || data?.symbol || '').toString().trim().toUpperCase();
+      await addTicker({ ...data, ticker: t });
+      showNotification('Ticker added. Pipeline started...', 'success');
+      setPipeline({ ticker: t, status: 'running', stage: 'queued', progress: 0, message: 'Queued' });
       loadTickers();
     } catch (error) {
       throw error;
@@ -113,6 +145,25 @@ export default function Tickers() {
           {notification.message}
         </div>
       )}
+
+      {pipeline?.status === 'running' && (
+        <div style={styles.overlay}>
+          <div style={styles.overlayCard}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>
+              Running pipeline for {pipeline.ticker}
+            </div>
+            <div style={{ marginBottom: 8, color: '#6b7280' }}>
+              {pipeline.stage}: {pipeline.message}
+            </div>
+            <div style={styles.progressBar}>
+              <div style={{ ...styles.progressFill, width: `${Math.min(100, Math.max(0, pipeline.progress || 0))}%` }} />
+            </div>
+            <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
+              {Math.round(pipeline.progress || 0)}%
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -126,5 +177,32 @@ const styles = {
   viewBtn: {
     fontSize: '0.8rem',
     padding: '0.4rem 0.8rem',
+  },
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.35)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+  },
+  overlayCard: {
+    width: 420,
+    background: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+  },
+  progressBar: {
+    height: 10,
+    background: '#e5e7eb',
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    background: '#3b82f6',
+    transition: 'width 200ms linear',
   },
 };

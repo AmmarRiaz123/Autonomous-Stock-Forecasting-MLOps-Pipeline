@@ -1,11 +1,12 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, BackgroundTasks
 from typing import List
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from schemas import TickerCreate, TickerResponse, TickerDetail
-from database import get_all_tickers, get_ticker, add_ticker, delete_ticker
+from database import get_all_tickers, get_ticker, add_ticker, delete_ticker, create_pipeline_run
 from db_config import get_db
+from pipeline_runner import run_ticker_pipeline_sync
 
 router = APIRouter()
 
@@ -29,18 +30,22 @@ async def list_tickers(db: AsyncSession = Depends(get_db)):
     ]
 
 @router.post("/tickers", response_model=TickerResponse, status_code=status.HTTP_201_CREATED)
-async def create_ticker(ticker_data: TickerCreate, db: AsyncSession = Depends(get_db)):
-    """Add a new ticker to monitor"""
-    existing = await get_ticker(db, ticker_data.ticker)
+async def create_ticker(ticker_data: TickerCreate, background: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+    """Add a new ticker to monitor and start notebooks pipeline"""
+    ticker_symbol = (ticker_data.ticker or "").strip().upper()
+    if not ticker_symbol:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ticker is required")
+
+    existing = await get_ticker(db, ticker_symbol)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ticker {ticker_data.ticker} already exists"
+            detail=f"Ticker {ticker_symbol} already exists"
         )
     
     new_ticker_data = {
-        "ticker": ticker_data.ticker,
-        "name": ticker_data.name,
+        "ticker": ticker_symbol,
+        "name": (ticker_data.name or ticker_symbol).strip(),
         "exchange": ticker_data.exchange,
         "status": "warning",
         "current_model": None,
@@ -52,6 +57,9 @@ async def create_ticker(ticker_data: TickerCreate, db: AsyncSession = Depends(ge
     
     ticker = await add_ticker(db, new_ticker_data)
     
+    run = await create_pipeline_run(db, ticker.ticker)
+    background.add_task(run_ticker_pipeline_sync, ticker.ticker, run.id)
+
     return {
         "ticker": ticker.ticker,
         "name": ticker.name,

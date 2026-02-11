@@ -9,3 +9,8 @@ sqlalchemy==2.0.25
 asyncpg==0.29.0
 alembic==1.13.1
 python-dotenv==1.0.0
+
+# Notebook execution (for running 01/02 notebooks from the backend)
+nbformat==5.10.4
+nbclient==0.10.2
+ipykernel==6.29.5

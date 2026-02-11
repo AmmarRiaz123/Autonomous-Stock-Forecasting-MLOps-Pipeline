@@ -20,6 +20,7 @@ class Ticker(Base):
     models = relationship("Model", back_populates="ticker_rel", cascade="all, delete-orphan")
     forecasts = relationship("ForecastPoint", back_populates="ticker_rel", cascade="all, delete-orphan")
     logs = relationship("Log", back_populates="ticker_rel", cascade="all, delete-orphan")
+    pipeline_runs = relationship("PipelineRun", back_populates="ticker_rel", cascade="all, delete-orphan")
 
 class Model(Base):
     __tablename__ = "models"
@@ -78,3 +79,21 @@ class Settings(Base):
     candidate_models = Column(JSON, default=["LSTM", "GRU", "Transformer", "XGBoost"])
     exchanges_enabled = Column(JSON, default=["NYSE", "NASDAQ"])
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class PipelineRun(Base):
+    __tablename__ = "pipeline_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ticker = Column(String(10), ForeignKey("tickers.ticker", ondelete="CASCADE"), nullable=False, index=True)
+
+    status = Column(String(20), default="running")  # running | success | error
+    stage = Column(String(50), default="queued")    # queued | eda | experiments | finalize
+    progress = Column(Float, default=0.0)           # 0..100
+    message = Column(Text, default="")
+
+    started_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    error = Column(Text, nullable=True)
+
+    # Relationships
+    ticker_rel = relationship("Ticker", back_populates="pipeline_runs")
